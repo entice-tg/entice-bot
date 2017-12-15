@@ -3,6 +3,8 @@ use commands;
 
 use errors::*;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::thread;
 
 use settings::Settings;
@@ -10,7 +12,8 @@ use settings::Settings;
 use tokio_core::reactor::Core;
 
 use telebot::bot::RcBot;
-use telebot::objects::Update;
+use telebot::objects::{Update, User};
+use telebot::functions::FunctionGetMe;
 
 use futures::{future, Future, IntoFuture, Stream};
 use futures::sync::mpsc::{channel, Receiver, Sender};
@@ -22,10 +25,16 @@ enum StreamItem {
     Telegram(RcBot, Update),
 }
 
+#[derive(Debug)]
+pub struct Context {
+    pub user: User,
+}
+
 struct EventLoop {
     tg: RcBot,
     event_loop: Core,
     receiver: Receiver<Command>,
+    context: Rc<RefCell<Option<Context>>>,
 }
 
 impl EventLoop {
@@ -41,6 +50,7 @@ impl EventLoop {
             event_loop: ev,
             tg: tg,
             receiver: receiver,
+            context: Rc::from(RefCell::from(None)),
         })
     }
 
@@ -52,6 +62,17 @@ impl EventLoop {
     pub fn run(mut self) -> Result<()> {
         let tg = &self.tg;
 
+        let ctx = self.context.clone();
+        self.event_loop.handle().spawn(
+            tg.get_me()
+                .send()
+                .and_then(move |(_, user)| {
+                    *ctx.borrow_mut() = Some(Context { user: user });
+                    Ok(())
+                })
+                .or_else(|x| Ok(println!("error getting me: {}", x))),
+        );
+
         let updates = tg.get_stream()
             .map(|(tg, u)| StreamItem::Telegram(tg, u))
             .from_err();
@@ -60,6 +81,7 @@ impl EventLoop {
             .map(|x| StreamItem::Command(x))
             .map_err(|_| Error::from("command error"));
 
+        let ctx = self.context.clone();
         let stream = commands
             .select(updates)
             .take_while(|x| {
@@ -74,7 +96,7 @@ impl EventLoop {
                         as Box<Future<Item = (), Error = Error>>
                 }
 
-                StreamItem::Telegram(t, u) => stream::dispatch(t, u),
+                StreamItem::Telegram(t, u) => stream::dispatch(t, &*ctx.borrow(), u),
             });
 
         self.event_loop

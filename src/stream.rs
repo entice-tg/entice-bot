@@ -1,3 +1,4 @@
+use entice::Context;
 use errors::*;
 use telebot::bot;
 use telebot::objects::*;
@@ -14,8 +15,12 @@ const QUERY_REPLY_TEXT: &'static str = "I'm nominating you for invitation to \
 
 pub fn dispatch(
     tg: bot::RcBot,
+    ctx: &Option<Context>,
     upd: Update,
 ) -> Box<Future<Item = (), Error = Error>> {
+
+    println!("My Username: {:?}", ctx);
+
     if let Some(inline) = upd.inline_query {
         println!("inline: {:?}", inline);
         return handle_inline_query(tg, inline);
