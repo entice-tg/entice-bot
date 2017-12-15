@@ -28,7 +28,7 @@ pub fn dispatch(
 
     println!("Other Update: {:?}", upd);
 
-    Box::from(future::empty())
+    Box::from(future::ok(()))
 }
 
 fn handle_callback_query(
