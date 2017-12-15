@@ -1,3 +1,4 @@
+use slog;
 use entice::Context;
 use errors::*;
 use telebot::bot;
@@ -14,33 +15,32 @@ const QUERY_REPLY_TEXT: &'static str = "I'm nominating you for invitation to \
                                         button.";
 
 pub fn dispatch(
+    logger: slog::Logger,
     tg: bot::RcBot,
-    ctx: &Option<Context>,
+    _ctx: &Option<Context>,
     upd: Update,
 ) -> Box<Future<Item = (), Error = Error>> {
-
-    println!("My Username: {:?}", ctx);
-
     if let Some(inline) = upd.inline_query {
-        println!("inline: {:?}", inline);
-        return handle_inline_query(tg, inline);
+        debug!(logger, "inline: {:?}", inline);
+        return handle_inline_query(logger, tg, inline);
     }
 
     if let Some(query) = upd.callback_query {
-        println!("callback: {:?}", query);
-        return handle_callback_query(tg, query);
+        debug!(logger, "callback: {:?}", query);
+        return handle_callback_query(logger, tg, query);
     }
 
-    println!("Other Update: {:?}", upd);
+    debug!(logger, "Other Update: {:?}", upd);
 
     Box::from(future::ok(()))
 }
 
 fn handle_callback_query(
+    logger: slog::Logger,
     tg: bot::RcBot,
     query: CallbackQuery,
 ) -> Box<Future<Item = (), Error = Error>> {
-    println!("Got callback_query");
+    debug!(logger, "Got callback_query");
 
     Box::from(
         tg.answer_callback_query(query.id)
@@ -52,6 +52,7 @@ fn handle_callback_query(
 }
 
 fn handle_inline_query(
+    logger: slog::Logger,
     tg: bot::RcBot,
     query: InlineQuery,
 ) -> Box<Future<Item = (), Error = Error>> {
@@ -76,7 +77,7 @@ fn handle_inline_query(
         .is_personal(true)
         .cache_time(0) // TODO: Can probably set this higher
         .send()
-        .map(|_| println!("Sent answer_inline_query"))
+        .map(move |_| debug!(logger, "Sent answer_inline_query"))
         .from_err(),
     )
 }

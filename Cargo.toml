@@ -13,11 +13,17 @@ error-chain = "0.11.0"
 serde = "1.0.0"
 serde_derive = "1.0.0"
 erased-serde = "0.3.3"
-ctrlc = "3.0.3"
+slog = "2.1.1"
+slog-term = "2.3.0"
+slog-async = "2.2.0"
 
 [dependencies.lazy_static]
 version = "1.0.0"
 features = ["nightly"]
+
+[dependencies.ctrlc]
+version = "3.0.3"
+features = ["termination"]
 
 [patch.crates-io]
 telebot = { path = "/home/hellfire/Code/telebot" }

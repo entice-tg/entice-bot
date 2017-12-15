@@ -1,6 +1,8 @@
 use stream;
 use commands;
 
+use slog;
+
 use errors::*;
 
 use std::cell::RefCell;
@@ -35,10 +37,12 @@ struct EventLoop {
     event_loop: Core,
     receiver: Receiver<Command>,
     context: Rc<RefCell<Option<Context>>>,
+    logger: slog::Logger,
 }
 
 impl EventLoop {
     pub fn new(
+        logger: slog::Logger,
         settings: Settings,
         receiver: Receiver<Command>,
     ) -> Result<EventLoop> {
@@ -51,6 +55,7 @@ impl EventLoop {
             tg: tg,
             receiver: receiver,
             context: Rc::from(RefCell::from(None)),
+            logger: logger,
         })
     }
 
@@ -62,15 +67,21 @@ impl EventLoop {
     pub fn run(mut self) -> Result<()> {
         let tg = &self.tg;
 
+        let log1 = self.logger.clone();
+        let log2 = self.logger.clone();
         let ctx = self.context.clone();
         self.event_loop.handle().spawn(
             tg.get_me()
                 .send()
                 .and_then(move |(_, user)| {
+                    info!(log1, "My username: {:?}", &user.username);
                     *ctx.borrow_mut() = Some(Context { user: user });
                     Ok(())
                 })
-                .or_else(|x| Ok(println!("error getting me: {}", x))),
+                .or_else(move |x| {
+                    error!(log2, "unable to get_me(): {}", x);
+                    Ok(())
+                }),
         );
 
         let updates = tg.get_stream()
@@ -81,6 +92,7 @@ impl EventLoop {
             .map(|x| StreamItem::Command(x))
             .map_err(|_| Error::from("command error"));
 
+        let logger = self.logger.clone();
         let ctx = self.context.clone();
         let stream = commands
             .select(updates)
@@ -96,7 +108,9 @@ impl EventLoop {
                         as Box<Future<Item = (), Error = Error>>
                 }
 
-                StreamItem::Telegram(t, u) => stream::dispatch(t, &*ctx.borrow(), u),
+                StreamItem::Telegram(t, u) => {
+                    stream::dispatch(logger.clone(), t, &*ctx.borrow(), u)
+                }
             });
 
         self.event_loop
@@ -125,13 +139,17 @@ impl EnticeBot {
         }
     }
 
-    pub fn start(&mut self, settings: Settings) -> Result<JoinHandle> {
+    pub fn start(
+        &mut self,
+        logger: slog::Logger,
+        settings: Settings,
+    ) -> Result<JoinHandle> {
         let receiver = match self.receiver.take() {
             Some(x) => x,
             None => bail!(ErrorKind::AlreadyStarted),
         };
 
-        Ok(thread::spawn(|| Self::run(settings, receiver)))
+        Ok(thread::spawn(|| Self::run(logger, settings, receiver)))
     }
 
     pub fn stop(&mut self) -> Result<()> {
@@ -144,8 +162,12 @@ impl EnticeBot {
         }
     }
 
-    fn run(settings: Settings, receiver: Receiver<Command>) -> Result<()> {
-        let mut lp = EventLoop::new(settings, receiver)?;
+    fn run(
+        logger: slog::Logger,
+        settings: Settings,
+        receiver: Receiver<Command>,
+    ) -> Result<()> {
+        let mut lp = EventLoop::new(logger, settings, receiver)?;
 
         lp.setup()?;
         lp.run()

@@ -14,6 +14,10 @@ extern crate error_chain;
 extern crate futures;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate slog;
+extern crate slog_async;
+extern crate slog_term;
 extern crate telebot;
 extern crate tokio_core;
 
@@ -32,6 +36,7 @@ mod entice;
 use errors::*;
 use settings::Settings;
 use entice::EnticeBot;
+use slog::Drain;
 
 fn is_file(path: String) -> ::std::result::Result<(), String> {
     if Path::new(&path).is_file() {
@@ -59,24 +64,41 @@ lazy_static! {
     static ref ENTICE : Mutex<EnticeBot> = Mutex::new(EnticeBot::new());
 }
 
-fn shutdown() {
-    println!("shutting down event loop");
-    ENTICE.lock().unwrap().stop().unwrap();
+fn set_ctrlc_handler() -> Result<()> {
+    fn shutdown() {
+        // Keeping a logger here prevents it from being dropped at exit
+        ENTICE.lock().unwrap().stop().ok();
+    }
+
+    ctrlc::set_handler(shutdown).chain_err(|| "couldn't set ctrlc handler")
+}
+
+fn new_root_logger() -> slog::Logger {
+    let decorator = slog_term::PlainDecorator::new(std::io::stdout());
+    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+
+    slog::Logger::root(drain, o!())
 }
 
 fn run() -> Result<()> {
     let matches = args();
 
-    ctrlc::set_handler(shutdown).chain_err(|| "couldn't set ctrlc handler")?;
+    let root_log = new_root_logger();
+
+    set_ctrlc_handler()?;
 
     Settings::add_file(matches.value_of("config").unwrap())?;
 
     let settings = Settings::try_fetch()?;
 
-    let join_handle = { ENTICE.lock().unwrap().start(settings)? };
+    info!(root_log, "Starting...");
+    let join_handle =
+        { ENTICE.lock().unwrap().start(root_log.new(o!()), settings)? };
+    info!(root_log, "Started.");
 
     join_handle.join().unwrap()?;
-    println!("shut down complete");
+    info!(root_log, "Shut down complete!");
     Ok(())
 }
 
