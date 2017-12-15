@@ -25,5 +25,13 @@ features = ["nightly"]
 version = "3.0.3"
 features = ["termination"]
 
+[dependencies.diesel]
+version = "1.0.0-beta1"
+features = ["postgres"]
+
+[dependencies.diesel_infer_schema]
+version = "1.0.0-beta1"
+features = ["postgres"]
+
 [patch.crates-io]
 telebot = { path = "/home/hellfire/Code/telebot" }
