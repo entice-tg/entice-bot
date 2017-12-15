@@ -1,0 +1,23 @@
+[package]
+name = "entice-bot"
+version = "0.1.0"
+authors = ["Sam Wilson <tecywiz121@hotmail.com>"]
+
+[dependencies]
+telebot = "0.2.5"
+tokio-core = "0.1.10"
+futures = "0.1.17"
+clap = "2.29.0"
+config = "0.7.0"
+error-chain = "0.11.0"
+serde = "1.0.0"
+serde_derive = "1.0.0"
+erased-serde = "0.3.3"
+ctrlc = "3.0.3"
+
+[dependencies.lazy_static]
+version = "1.0.0"
+features = ["nightly"]
+
+[patch.crates-io]
+telebot = { path = "/home/hellfire/Code/telebot" }
