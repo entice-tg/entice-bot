@@ -1,4 +1,4 @@
-use stream;
+use stream::Handler;
 use commands;
 
 use slog;
@@ -37,6 +37,7 @@ struct EventLoop {
     event_loop: Core,
     receiver: Receiver<Command>,
     context: Rc<RefCell<Option<Context>>>,
+    update_handler: Rc<Handler>,
     logger: slog::Logger,
 }
 
@@ -55,6 +56,7 @@ impl EventLoop {
             tg: tg,
             receiver: receiver,
             context: Rc::from(RefCell::from(None)),
+            update_handler: Rc::from(Handler::new(logger.clone())),
             logger: logger,
         })
     }
@@ -92,8 +94,8 @@ impl EventLoop {
             .map(|x| StreamItem::Command(x))
             .map_err(|_| Error::from("command error"));
 
-        let logger = self.logger.clone();
         let ctx = self.context.clone();
+        let handler = self.update_handler.clone();
         let stream = commands
             .select(updates)
             .take_while(|x| {
@@ -109,7 +111,7 @@ impl EventLoop {
                 }
 
                 StreamItem::Telegram(t, u) => {
-                    stream::dispatch(logger.clone(), t, &*ctx.borrow(), u)
+                    handler.dispatch(t, &*ctx.borrow(), u)
                 }
             });
 
