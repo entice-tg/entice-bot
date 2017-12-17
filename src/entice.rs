@@ -11,6 +11,9 @@ use std::thread;
 
 use settings::Settings;
 
+use diesel::prelude::*;
+use diesel::pg::PgConnection;
+
 use tokio_core::reactor::Core;
 
 use telebot::bot::RcBot;
@@ -27,9 +30,9 @@ enum StreamItem {
     Telegram(RcBot, Update),
 }
 
-#[derive(Debug)]
 pub struct Context {
     pub user: User,
+    pub db: PgConnection,
 }
 
 struct EventLoop {
@@ -39,6 +42,7 @@ struct EventLoop {
     context: Rc<RefCell<Option<Context>>>,
     update_handler: Rc<Handler>,
     logger: slog::Logger,
+    settings: Settings,
 }
 
 impl EventLoop {
@@ -53,11 +57,12 @@ impl EventLoop {
 
         Ok(EventLoop {
             event_loop: ev,
-            tg: tg,
+            tg: tg.clone(),
             receiver: receiver,
             context: Rc::from(RefCell::from(None)),
-            update_handler: Rc::from(Handler::new(logger.clone())),
+            update_handler: Rc::from(Handler::new(logger.clone(), tg.clone())),
             logger: logger,
+            settings: settings,
         })
     }
 
@@ -69,6 +74,9 @@ impl EventLoop {
     pub fn run(mut self) -> Result<()> {
         let tg = &self.tg;
 
+        let db = PgConnection::establish(&self.settings.database.url)
+            .chain_err(|| "unable to connect to database")?;
+
         let log1 = self.logger.clone();
         let log2 = self.logger.clone();
         let ctx = self.context.clone();
@@ -77,7 +85,7 @@ impl EventLoop {
                 .send()
                 .and_then(move |(_, user)| {
                     info!(log1, "My username: {:?}", &user.username);
-                    *ctx.borrow_mut() = Some(Context { user: user });
+                    *ctx.borrow_mut() = Some(Context { user: user, db: db });
                     Ok(())
                 })
                 .or_else(move |x| {
@@ -110,8 +118,8 @@ impl EventLoop {
                         as Box<Future<Item = (), Error = Error>>
                 }
 
-                StreamItem::Telegram(t, u) => {
-                    handler.dispatch(t, &*ctx.borrow(), u)
+                StreamItem::Telegram(_, u) => {
+                    handler.dispatch(&*ctx.borrow(), u)
                 }
             });
 

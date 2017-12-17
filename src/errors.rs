@@ -7,5 +7,6 @@ error_chain! {
     foreign_links {
         ConfigError(::config::ConfigError);
         TelebotError(::telebot::Error);
+        DatabaseError(::diesel::result::Error);
     }
 }

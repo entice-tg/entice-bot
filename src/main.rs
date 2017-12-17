@@ -1,7 +1,11 @@
 #![feature(conservative_impl_trait)]
 #![recursion_limit = "1024"] // For error_chain
 
+extern crate chrono;
 extern crate ctrlc;
+
+#[macro_use]
+extern crate diesel;
 extern crate erased_serde;
 #[macro_use]
 extern crate serde_derive;
@@ -32,6 +36,8 @@ mod errors;
 mod commands;
 mod stream;
 mod entice;
+mod schema;
+mod models;
 
 use errors::*;
 use settings::Settings;

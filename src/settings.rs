@@ -31,9 +31,15 @@ impl TelegramBot {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct Database {
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub telegram_bot: TelegramBot,
     pub telegram_client: TelegramClient,
+    pub database: Database,
 }
 
 impl Settings {
