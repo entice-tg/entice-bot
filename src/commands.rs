@@ -1,71 +1,79 @@
+use entice::Context;
+use templates;
 use telebot::{self, bot};
 use telebot::objects::Message;
 use telebot::functions::FunctionMessage;
+use slog;
 
-use futures::{Future, Stream};
+use futures::{future, Future, Stream};
 
-pub fn register_all(tg: &bot::RcBot) {
-    Start::register(tg);
+use std::rc::Rc;
+use std::cell::RefCell;
+
+pub fn register_all(logger: slog::Logger,
+                    tg: &bot::RcBot,
+                    ctx: Rc<RefCell<Option<Context>>>) {
+    register(Start::new(tg.clone(), logger), tg, ctx.clone());
+}
+
+fn register<T: Command>(
+    mut cmd: T,
+    tg: &bot::RcBot,
+    ctx: Rc<RefCell<Option<Context>>>,
+) {
+    let hndl = tg.new_cmd(T::NAME).and_then(
+        move |(tg, msg)| match *ctx.borrow() {
+            None => Box::from(tg.message(
+                msg.chat.id,
+                "Not ready yet :(".to_owned(),
+            ).send().map(|_| ())),
+            Some(ref x) => cmd.handle(x, msg),
+        },
+    );
+
+    tg.register(hndl);
 }
 
 trait Command: 'static {
     const NAME: &'static str;
 
-    fn register(tg: &bot::RcBot) {
-        let hndl = tg.new_cmd(Self::NAME).and_then(Self::handle);
-
-        tg.register(hndl);
-    }
+    fn new(tg: bot::RcBot, logger: slog::Logger) -> Self;
 
     fn handle(
-        (bot::RcBot, Message),
-    ) -> Box<Future<Item = (bot::RcBot, Message), Error = telebot::Error>>;
+        &mut self,
+        &Context,
+        Message,
+    ) -> Box<Future<Item = (), Error = telebot::Error>>;
 }
 
-struct Start;
-
-impl Start {
-    const INTRO: &'static str = "Hello! I'm @EnticeBot.\n\nI help manage \
-                                 inviting new users to groups. If you have a \
-                                 channel you'd like me to help you with, try \
-                                 /register. Otherwise, you might want to try \
-                                 /help.";
-
-    const NOM: &'static str = "Hello! I'm @EnticeBot.\n\nYou've been \
-                               nominated for invitation to {group}, and will \
-                               receive a message here if approved.";
-
-    fn handle_nomination(
-        tg: bot::RcBot,
-        msg: Message,
-    ) -> Box<Future<Item = (bot::RcBot, Message), Error = telebot::Error>> {
-        Box::from(tg.message(msg.chat.id, Self::NOM.to_owned()).send())
-    }
-
-    fn handle_introduction(
-        tg: bot::RcBot,
-        msg: Message,
-    ) -> Box<Future<Item = (bot::RcBot, Message), Error = telebot::Error>> {
-        Box::from(tg.message(msg.chat.id, Self::INTRO.to_owned()).send())
-    }
+struct Start {
+    tg: bot::RcBot,
+    logger: slog::Logger,
 }
 
 impl Command for Start {
     const NAME: &'static str = "/start";
 
-    fn handle(
-        (tg, msg): (bot::RcBot, Message),
-    ) -> Box<Future<Item = (bot::RcBot, Message), Error = telebot::Error>> {
-        // TODO: Stop fighting the borrow checker here
-        let len = match msg.text {
-            None => 0,
-            Some(ref txt) => txt.len(),
-        };
-
-        if len > 0 {
-            Self::handle_nomination(tg, msg)
-        } else {
-            Self::handle_introduction(tg, msg)
+    fn new(tg: bot::RcBot, logger: slog::Logger) -> Self {
+        Start {
+            tg: tg,
+            logger: logger,
         }
+    }
+
+    fn handle(
+        &mut self,
+        ctx: &Context,
+        msg: Message,
+    ) -> Box<Future<Item = (), Error = telebot::Error>> {
+        if msg.chat.kind != "private" {
+            return Box::from(future::ok(()));
+        }
+
+        let text = ctx.templates.render(templates::REPLY_START, &json!({
+            "username": ctx.user.username,
+        })).unwrap();
+
+        Box::from(self.tg.message(msg.chat.id, text).send().map(|_| ()))
     }
 }

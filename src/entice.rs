@@ -1,5 +1,6 @@
 use stream::Handler;
 use commands;
+use templates;
 
 use slog;
 
@@ -23,6 +24,8 @@ use telebot::functions::FunctionGetMe;
 use futures::{future, Future, IntoFuture, Stream};
 use futures::sync::mpsc::{channel, Receiver, Sender};
 
+use handlebars::Handlebars;
+
 pub type JoinHandle = ::std::thread::JoinHandle<Result<()>>;
 
 enum StreamItem {
@@ -33,6 +36,7 @@ enum StreamItem {
 pub struct Context {
     pub user: User,
     pub db: PgConnection,
+    pub templates: Handlebars,
 }
 
 struct EventLoop {
@@ -67,7 +71,9 @@ impl EventLoop {
     }
 
     pub fn setup(&mut self) -> Result<()> {
-        commands::register_all(&self.tg);
+        commands::register_all(self.logger.clone(),
+                               &self.tg,
+                               self.context.clone());
         Ok(())
     }
 
@@ -77,6 +83,9 @@ impl EventLoop {
         let db = PgConnection::establish(&self.settings.database.url)
             .chain_err(|| "unable to connect to database")?;
 
+        let mut handlebars = Handlebars::new();
+        templates::register_all(&mut handlebars)?;
+
         let log1 = self.logger.clone();
         let log2 = self.logger.clone();
         let ctx = self.context.clone();
@@ -85,7 +94,12 @@ impl EventLoop {
                 .send()
                 .and_then(move |(_, user)| {
                     info!(log1, "My username: {:?}", &user.username);
-                    *ctx.borrow_mut() = Some(Context { user: user, db: db });
+
+                    *ctx.borrow_mut() = Some(Context {
+                        user: user,
+                        db: db,
+                        templates: handlebars,
+                    });
                     Ok(())
                 })
                 .or_else(move |x| {

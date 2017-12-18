@@ -3,12 +3,15 @@
 
 extern crate chrono;
 extern crate ctrlc;
+extern crate handlebars;
 
 #[macro_use]
 extern crate diesel;
 extern crate erased_serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
 
 #[macro_use]
 extern crate clap;
@@ -38,6 +41,7 @@ mod stream;
 mod entice;
 mod schema;
 mod models;
+mod templates;
 
 use errors::*;
 use settings::Settings;

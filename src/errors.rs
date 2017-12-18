@@ -8,5 +8,6 @@ error_chain! {
         ConfigError(::config::ConfigError);
         TelebotError(::telebot::Error);
         DatabaseError(::diesel::result::Error);
+        TemplateError(::handlebars::TemplateError);
     }
 }

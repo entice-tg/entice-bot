@@ -2,6 +2,7 @@ use slog;
 use diesel;
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use diesel::prelude::*;
+use templates;
 use entice::Context;
 use errors::*;
 use telebot::bot;
@@ -156,9 +157,18 @@ impl Handler {
             };
 
             info!(self.logger, "Joined Chat: {} ({})", chat.title, chat.id);
+
+            if msg.chat.kind == "private" {
+                return Box::from(future::ok(()));
+            }
+
         }
 
-        Box::from(future::ok(()))
+        let text = ctx.templates.render(templates::JOIN, &json!({
+            "username": ctx.user.username,
+        })).unwrap();
+
+        Box::from(self.tg.message(msg.chat.id, text).send().map(|_| ()).from_err())
     }
 
     fn handle_callback_query(
